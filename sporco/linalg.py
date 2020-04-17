@@ -747,7 +747,7 @@ def cho_solve_AATI(A, rho, b, c, lwr, check_finite=True):
     N, M = A.shape
     if N >= M:
         x = (b - linalg.cho_solve((c, lwr), b.dot(A).T,
-            check_finite=check_finite).T.dot(A.T)) / rho
+                                  check_finite=check_finite).T.dot(A.T)) / rho
     else:
         x = linalg.cho_solve((c, lwr), b.T, check_finite=check_finite).T
     return x
