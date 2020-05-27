@@ -90,10 +90,11 @@ admm.rpca = sporco_cupy_patch_module('sporco.admm.rpca',
 
 # Construct sporco.cupy.admm.tvl1
 admm.tvl1 = sporco_cupy_patch_module('sporco.admm.tvl1',
-            {'admm': admm.admm, 'rrs': linalg.rrs, 'prox_l2': prox.prox_l2,
-             'zpad': array.zpad, 'atleast_nd': array.atleast_nd,
-             'zdivide': array.zdivide, 'rfftn': fft.rfftn,
-             'irfftn': fft.irfftn, 'gradient_filters': signal.gradient_filters,
+            {'admm': admm.admm, 'rrs': linalg.rrs, 'prox_l1': prox.prox_l1,
+             'prox_l2': prox.prox_l2, 'zpad': array.zpad,
+             'atleast_nd': array.atleast_nd, 'zdivide': array.zdivide,
+             'rfftn': fft.rfftn, 'irfftn': fft.irfftn,
+             'gradient_filters': signal.gradient_filters,
              'grad': signal.grad, 'gradT': signal.gradT})
 
 # Construct sporco.cupy.admm.tvl2
@@ -107,8 +108,7 @@ admm.tvl2 = sporco_cupy_patch_module('sporco.admm.tvl2',
 
 # Construct sporco.cupy.admm.bpdn
 admm.bpdn = sporco_cupy_patch_module('sporco.admm.bpdn',
-                                     {'admm': admm.admm, 'sl': linalg,
-                                      'sp': prox})
+                {'admm': admm.admm, 'sl': linalg, 'sp': prox})
 
 # Construct sporco.cupy.admm.cbpdn
 admm.cbpdn = sporco_cupy_patch_module('sporco.admm.cbpdn',
@@ -135,11 +135,11 @@ admm.cbpdn.AddMaskSim.index_addmsk = _index_addmsk
 # Construct sporco.cupy.admm.cbpdntv
 admm.cbpdntv = sporco_cupy_patch_module('sporco.admm.cbpdntv',
             {'admm': admm.admm, 'cr': cnvrep, 'cbpdn': admm.cbpdn,
-             'sl': linalg, 'sp': prox, 'rfftn': fft.rfftn, 'irfftn': fft.irfftn,
-                 'empty_aligned': fft.empty_aligned,
-                 'rfftn_empty_aligned': fft.rfftn_empty_aligned,
-                 'rfl2norm2': fft.rfl2norm2,
-                 'gradient_filters': signal.gradient_filters})
+             'sl': linalg, 'sp': prox, 'rfftn': fft.rfftn,
+             'irfftn': fft.irfftn, 'empty_aligned': fft.empty_aligned,
+             'rfftn_empty_aligned': fft.rfftn_empty_aligned,
+             'rfl2norm2': fft.rfl2norm2,
+             'gradient_filters': signal.gradient_filters})
 
 admm.cbpdntv.ConvBPDNScalarTV.cnst_c = _cnst0
 admm.cbpdntv.ConvBPDNRecTV.cnst_c = _cnst0
