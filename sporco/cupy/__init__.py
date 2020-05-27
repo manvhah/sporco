@@ -215,9 +215,9 @@ def _promote16(u, fn=None, *args, **kwargs):
 
 
 # Construct sporco.cupy.array
-array = sporco_cupy_patch_module('sporco.array', {'list2array': _list2array,
-                                                  'zdivide': _zdivide,
-                                                  'promote16': _promote16})
+array = sporco_cupy_patch_module('sporco.array',
+        {'list2array': _list2array, 'zdivide': _zdivide,
+         'promote16': _promote16})
 
 
 # Construct sporco.cupy.cnvrep
