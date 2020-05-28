@@ -117,7 +117,7 @@ def rgb2gray(rgb):
 
 
 
-@renamed_function(depname='Gax', depmod='sporco.linalg')
+@renamed_function(depname='grad', depmod='sporco.linalg')
 def grad(x, ax):
     """Compute gradient of `x` along axis `ax`.
 
@@ -141,7 +141,7 @@ def grad(x, ax):
 
 
 
-@renamed_function(depname='GTax', depmod='sporco.linalg')
+@renamed_function(depname='gradT', depmod='sporco.linalg')
 def gradT(x, ax):
     """Compute transpose of gradient of `x` along axis `ax`.
 
@@ -166,7 +166,7 @@ def gradT(x, ax):
 
 
 
-@renamed_function(depname='GradientFilters', depmod='sporco.linalg')
+@renamed_function(depname='gradient_filters', depmod='sporco.linalg')
 def gradient_filters(ndim, axes, axshp, dtype=None):
     r"""Construct a set of filters for computing gradients in the
     frequency domain.
