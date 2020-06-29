@@ -2223,8 +2223,8 @@ class ConvBPDNMaskDcpl(ConvTwoBlockCnstrnt):
         AXU = self.AX + self.U
         Y0 = (self.rho*(self.block_sep0(AXU) - self.S)) / \
              (self.W**2 + self.rho)
-        Y1 = sp.prox_l1(self.block_sep1(AXU),
-                        (self.lmbda / self.rho) * self.wl1)
+        Y1 = sp.prox_l1(self.block_sep1(AXU), 
+                (self.lmbda / self.rho) * self.wl1)
         self.Y = self.block_cat(Y0, Y1)
 
         super(ConvBPDNMaskDcpl, self).ystep()
@@ -2713,6 +2713,7 @@ class ConvL1L1Grd(ConvBPDNMaskDcpl):
 
         g0v = self.obfn_g0(self.obfn_g0var())
         g1v = self.obfn_g1(self.obfn_g1var())
+
         rgr = sl.rfl2norm2(np.sqrt(self.GHGf * np.conj(self.Xf) * self.Xf),
                            self.cri.Nv, self.cri.axisN)/2.0
         obj = g0v + self.lmbda*g1v + self.mu*rgr
@@ -2751,6 +2752,318 @@ class ConvL1L1Grd(ConvBPDNMaskDcpl):
                 self.Df, np.conj(self.Df),
                 (self.mu / self.rho) * self.GHGf + 1.0, self.cri.axisM)
 
+
+
+class ConvL2L1Grd(ConvBPDNMaskDcpl):
+    r"""
+    MODIFIED ConvL1L1Grd:
+        L2 data fidelity term
+        L2,1 mixed sparsity norm (expecting interlaced atoms)
+    ADMM algorithm for a Convolutional Sparse Coding problem with
+    an :math:`\ell_2` data fidelity term and both :math:`\ell_1`
+    and :math:`\ell_2` of gradient regularisation terms
+    :cite:`wohlberg-2016-convolutional2`. // L2 data fidelity term hacked by mha
+
+    |
+
+    .. inheritance-diagram:: ConvL2L1Grd
+       :parts: 2
+
+    |
+
+    Solve the optimisation problem
+
+    .. math::
+       \mathrm{argmin}_\mathbf{x} \;
+       (1/2) \left\|  W \left(\sum_m \mathbf{d}_m * \mathbf{x}_m -
+       \mathbf{s}\right) \right\|_2^2 + \lambda \sum_m
+       \| \mathbf{x}_m \|_1 + (\mu/2) \sum_i \sum_m
+       \| G_i \mathbf{x}_m \|_2^2\;\;,
+
+    where :math:`W` is a mask array and :math:`G_i` is an operator
+    computing the derivative along index :math:`i`, via the ADMM problem
+
+    .. math::
+       \mathrm{argmin}_{\mathbf{x},\mathbf{y}_0,\mathbf{y}_1} \;
+       (1/2) \| W \mathbf{y}_0 \|_2^2 + \lambda \| \mathbf{y}_1 \|_1
+       + (\mu/2) \sum_i \| \Gamma_i \mathbf{x} \|_2^2
+       \;\text{such that}\; \left( \begin{array}{c} D \\ I \end{array}
+       \right) \mathbf{x} - \left( \begin{array}{c} \mathbf{y}_0 \\
+       \mathbf{y}_1 \end{array} \right) = \left( \begin{array}{c}
+       \mathbf{s} \\ \mathbf{0} \end{array} \right) \;\;,
+
+    where :math:`D \mathbf{x} = \sum_m \mathbf{d}_m * \mathbf{x}_m` and
+
+    .. math::
+       \Gamma_i = \left( \begin{array}{ccc} G_i & 0 & \ldots \\
+       0 & G_i & \ldots \\ \vdots & \vdots & \ddots \end{array}
+       \right) \;\;.
+
+    After termination of the :meth:`solve` method, attribute :attr:`itstat`
+    is a list of tuples representing statistics of each iteration. The
+    fields of the named tuple ``IterationStats`` are:
+
+       ``Iter`` : Iteration number
+
+       ``ObjFun`` : Objective function value
+
+       ``DFid`` : Value of data fidelity term :math:`(1/2) \| W
+       (\sum_m \mathbf{d}_m * \mathbf{x}_m - \mathbf{s}) \|_2`
+
+       ``RegL1`` : Value of regularisation term :math:`\sum_m \|
+       \mathbf{x}_m \|_1`
+
+       ``RegGrad`` : Value of regularisation term :math:`(1/2) \sum_i
+       \sum_m \| G_i \mathbf{x}_m \|_2^2`
+
+       ``PrimalRsdl`` : Norm of primal residual
+
+       ``DualRsdl`` : Norm of dual residual
+
+       ``EpsPrimal`` : Primal residual stopping tolerance
+       :math:`\epsilon_{\mathrm{pri}}`
+
+       ``EpsDual`` : Dual residual stopping tolerance
+       :math:`\epsilon_{\mathrm{dua}}`
+
+       ``Rho`` : Penalty parameter
+
+       ``XSlvRelRes`` : Relative residual of X step solver
+
+       ``Time`` : Cumulative run time
+    """
+
+    class Options(ConvBPDNMaskDcpl.Options):
+        r"""ConvL2L1Grd algorithm options
+
+        Options include all of those defined in
+        :class:`ConvBPDNMaskDcpl.Options`, together with additional
+        options:
+
+          ``GradWeight`` : An array of weights :math:`w_m` for the term
+          penalising the gradient of the coefficient maps. If this
+          option is defined, the gradient regularization term is
+          :math:`\sum_i \sum_m w_m \| G_i \mathbf{x}_m \|_2^2` where
+          :math:`w_m` is the weight for filter index :math:`m`. The array
+          should be an :math:`M`-vector where :math:`M` is the number of
+          filters in the dictionary.
+        """
+
+        defaults = copy.deepcopy(ConvBPDNMaskDcpl.Options.defaults)
+        defaults.update({'GradWeight': 1.0})
+
+
+        def __init__(self, opt=None):
+            """
+            Parameters
+            ----------
+            opt : dict or None, optional (default None)
+              ConvL1L1Grd algorithm options
+            """
+
+            if opt is None:
+                opt = {}
+            ConvBPDNMaskDcpl.Options.__init__(self, opt)
+
+
+
+    itstat_fields_objfn = ('ObjFun', 'DFid', 'RegL1', 'RegGrad')
+    hdrtxt_objfn = ('Fnc', 'DFid', u('Regℓ1'), u('Regℓ2∇'))
+    hdrval_objfun = {'Fnc': 'ObjFun', 'DFid': 'DFid',
+                     u('Regℓ1'): 'RegL1', u('Regℓ2∇'): 'RegGrad'}
+
+
+
+    def __init__(self, D, S, lmbda, mu, W=None, opt=None, dimK=None, dimN=2,
+        i_cplx = False):
+        """
+
+        |
+
+        **Call graph**
+
+        .. image:: ../_static/jonga/cl1l1grd_init.svg
+           :width: 20%
+           :target: ../_static/jonga/cl1l1grd_init.svg
+
+        |
+
+
+        Parameters
+        ----------
+        D : array_like
+          Dictionary matrix
+        S : array_like
+          Signal vector or matrix
+        lmbda : float
+          Regularisation parameter (l1)
+        mu : float
+          Regularisation parameter (gradient)
+        W : array_like
+          Mask array. The array shape must be such that the array is
+          compatible for multiplication with input array S (see
+          :func:`.cnvrep.mskWshape` for more details).
+        opt : :class:`ConvL1L1Grd.Options` object
+          Algorithm options
+        dimK : 0, 1, or None, optional (default None)
+          Number of dimensions in input signal corresponding to multiple
+          independent signals
+        dimN : int, optional (default 2)
+          Number of spatial dimensions
+        i_cplx : bool, If basis functions are complex interlaced Re/Im:
+            using L2 across Re/Im in sparsity penalty norm L1 and gradient
+            filters
+        """
+
+        if opt is None:
+            opt = ConvL2L1Grd.Options()
+
+        self.mu = mu
+        self.GHGf = 0
+        self.i_cplx = i_cplx
+        super(ConvL2L1Grd, self).__init__(D, S, lmbda, W, opt, dimK=dimK,
+                                          dimN=dimN)
+        self.mu = self.dtype.type(mu)
+
+        if hasattr(opt['GradWeight'], 'ndim'):
+            self.Wgrd = np.asarray(opt['GradWeight'].reshape((1,)*(dimN+2) +
+                                   opt['GradWeight'].shape), dtype=self.dtype)
+        else:
+            self.Wgrd = np.asarray(opt['GradWeight'], dtype=self.dtype)
+
+        self.Gf, GHGf = sl.gradient_filters(self.cri.dimN+3, self.cri.axisN,
+                                            self.cri.Nv, dtype=self.dtype)
+        self.GHGf = self.Wgrd * GHGf
+
+
+
+    def setdict(self, D=None):
+        """Set dictionary array."""
+
+        if D is not None:
+            self.D = np.asarray(D, dtype=self.dtype)
+        self.Df = sl.rfftn(self.D, self.cri.Nv, self.cri.axisN)
+        if self.opt['HighMemSolve'] and self.cri.Cd == 1:
+            self.c = sl.solvedbd_sm_c(
+                self.Df, np.conj(self.Df),
+                (self.mu / self.rho) * self.GHGf + 1.0, self.cri.axisM)
+        else:
+            self.c = None
+
+
+
+    def xstep(self):
+        r"""Minimise Augmented Lagrangian with respect to
+        :math:`\mathbf{x}`.
+        """
+
+        self.YU[:] = self.Y - self.U
+        self.block_sep0(self.YU)[:] += self.S
+        YUf = sl.rfftn(self.YU, None, self.cri.axisN)
+        if self.cri.Cd == 1:
+            b = np.conj(self.Df) * self.block_sep0(YUf) + self.block_sep1(YUf)
+        else:
+            b = sl.inner(np.conj(self.Df), self.block_sep0(YUf),
+                         axis=self.cri.axisC) + self.block_sep1(YUf)
+
+        if self.cri.Cd == 1:
+            self.Xf[:] = sl.solvedbd_sm(
+                self.Df, (self.mu / self.rho) * self.GHGf + 1.0, b,
+                self.c, self.cri.axisM)
+        else:
+            self.Xf[:] = sl.solvemdbi_ism(
+                self.Df, (self.mu / self.rho) * self.GHGf + 1.0, b,
+                self.cri.axisM, self.cri.axisC)
+
+        self.X = sl.irfftn(self.Xf, self.cri.Nv, self.cri.axisN)
+
+        if self.opt['LinSolveCheck']:
+            Dop = lambda x: sl.inner(self.Df, x, axis=self.cri.axisM)
+            if self.cri.Cd == 1:
+                DHop = lambda x: np.conj(self.Df) * x
+            else:
+                DHop = lambda x: sl.inner(np.conj(self.Df), x,
+                                          axis=self.cri.axisC)
+            ax = DHop(Dop(self.Xf)) + ((self.mu / self.rho) * self.GHGf
+                                       + 1.0) * self.Xf
+            self.xrrs = sl.rrs(ax, b)
+        else:
+            self.xrrs = None
+
+
+
+    def ystep(self):
+        r"""Minimise Augmented Lagrangian with respect to
+        :math:`\mathbf{y}`.
+        """
+
+        AXU = self.AX + self.U
+
+        ### Mask Decoupling
+        Y0 = (self.rho*(self.block_sep0(AXU) - self.S)) / (self.W**2 + self.rho)
+
+        ## L1L1
+        # Y0 = sp.prox_l1(self.block_sep0(AXU) - self.S, (1.0/self.rho)*self.W)
+        
+        ## pure L1
+        Y1 = sp.prox_l1(self.block_sep1(AXU), (self.lmbda/self.rho)*self.wl1)
+
+        self.Y = self.block_cat(Y0, Y1)
+
+        super(ConvBPDNMaskDcpl, self).ystep()
+
+
+    def eval_objfn(self):
+        """Compute components of regularisation function as well as total
+        contribution to objective function.
+        """
+
+        g0v = self.obfn_g0(self.obfn_g0var())
+
+        # if self.i_cplx: # interlaced basis functions?
+
+            # # coefficient sparsity term
+            # g1v = self.obfn_g1(self.obfn_g1var()[:,:,:,:,0::2]+ 1j*self.obfn_g1var()[:,:,:,:,1::2])
+            # g1v = np.sum(np.sqrt(np.sum(self.obfn_g1var()**2,axis=self.cri.axisC)))
+
+            # #gradient
+            # cXf = self.Xf[:,:,:,:,0::2] + 1j*self.Xf[:,:,:,:,1::2]
+            # rgr = sl.rfl2norm2(np.sqrt(self.GHGf * np.conj(cXf) * cXf),self.cri.Nv, self.cri.axisN)/2.0
+        # else:
+
+        # L2 over the channels, then L1
+        # g1v = np.sum(np.sqrt(np.sum(self.obfn_g1var()**2,axis=self.cri.axisC)))
+
+        # pure L1
+        g1v = self.obfn_g1(self.obfn_g1var())
+
+        rgr = sl.rfl2norm2(np.sqrt(self.GHGf * np.conj(self.Xf) * self.Xf),
+                           self.cri.Nv, self.cri.axisN)/2.0
+
+        obj = g0v + self.lmbda*g1v + self.mu*rgr
+        return (obj, g0v, g1v, rgr)
+
+
+    def rsdl_s(self, Yprev, Y):
+        """Compute dual residual vector."""
+
+        return self.rho * self.cnst_AT(Yprev - Y)
+
+
+
+    def rsdl_sn(self, U):
+        """Compute dual residual normalisation term."""
+
+        return self.rho * np.linalg.norm(self.cnst_AT(U))
+
+
+    def rhochange(self):
+        """Updated cached c array when rho changes."""
+
+        if self.opt['HighMemSolve'] and self.cri.Cd == 1:
+            self.c = sl.solvedbd_sm_c(
+                self.Df, np.conj(self.Df),
+                (self.mu / self.rho) * self.GHGf + 1.0, self.cri.axisM)
 
 
 
