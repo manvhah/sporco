@@ -2755,12 +2755,11 @@ class ConvL1L1Grd(ConvBPDNMaskDcpl):
                 (self.mu / self.rho) * self.GHGf + 1.0, self.cri.axisM)
 
 
-
 class ConvL2L1Grd(ConvBPDNMaskDcpl):
     r"""
     MODIFIED ConvL1L1Grd:
         L2 data fidelity term
-        L2,1 mixed sparsity norm (expecting interlaced atoms)
+        L2,1 mixed sparsity norm
     ADMM algorithm for a Convolutional Sparse Coding problem with
     an :math:`\ell_2` data fidelity term and both :math:`\ell_1`
     and :math:`\ell_2` of gradient regularisation terms
@@ -2860,7 +2859,7 @@ class ConvL2L1Grd(ConvBPDNMaskDcpl):
             Parameters
             ----------
             opt : dict or None, optional (default None)
-              ConvL1L1Grd algorithm options
+              ConvL2L1Grd algorithm options
             """
 
             if opt is None:
@@ -2905,7 +2904,7 @@ class ConvL2L1Grd(ConvBPDNMaskDcpl):
           Mask array. The array shape must be such that the array is
           compatible for multiplication with input array S (see
           :func:`.cnvrep.mskWshape` for more details).
-        opt : :class:`ConvL1L1Grd.Options` object
+        opt : :class:`ConvL2L1Grd.Options` object
           Algorithm options
         dimK : 0, 1, or None, optional (default None)
           Number of dimensions in input signal corresponding to multiple
@@ -2933,7 +2932,7 @@ class ConvL2L1Grd(ConvBPDNMaskDcpl):
         else:
             self.Wgrd = np.asarray(opt['GradWeight'], dtype=self.dtype)
 
-        self.Gf, GHGf = sl.gradient_filters(self.cri.dimN+3, self.cri.axisN,
+        self.Gf, GHGf = gradient_filters(self.cri.dimN+3, self.cri.axisN,
                                             self.cri.Nv, dtype=self.dtype)
         self.GHGf = self.Wgrd * GHGf
 
@@ -2944,7 +2943,7 @@ class ConvL2L1Grd(ConvBPDNMaskDcpl):
 
         if D is not None:
             self.D = np.asarray(D, dtype=self.dtype)
-        self.Df = sl.rfftn(self.D, self.cri.Nv, self.cri.axisN)
+        self.Df = rfftn(self.D, self.cri.Nv, self.cri.axisN)
         if self.opt['HighMemSolve'] and self.cri.Cd == 1:
             self.c = sl.solvedbd_sm_c(
                 self.Df, np.conj(self.Df),
@@ -2961,7 +2960,7 @@ class ConvL2L1Grd(ConvBPDNMaskDcpl):
 
         self.YU[:] = self.Y - self.U
         self.block_sep0(self.YU)[:] += self.S
-        YUf = sl.rfftn(self.YU, None, self.cri.axisN)
+        YUf = rfftn(self.YU, None, self.cri.axisN)
         if self.cri.Cd == 1:
             b = np.conj(self.Df) * self.block_sep0(YUf) + self.block_sep1(YUf)
         else:
@@ -2977,7 +2976,7 @@ class ConvL2L1Grd(ConvBPDNMaskDcpl):
                 self.Df, (self.mu / self.rho) * self.GHGf + 1.0, b,
                 self.cri.axisM, self.cri.axisC)
 
-        self.X = sl.irfftn(self.Xf, self.cri.Nv, self.cri.axisN)
+        self.X = irfftn(self.Xf, self.cri.Nv, self.cri.axisN)
 
         if self.opt['LinSolveCheck']:
             Dop = lambda x: sl.inner(self.Df, x, axis=self.cri.axisM)
@@ -3050,12 +3049,12 @@ class ConvL2L1Grd(ConvBPDNMaskDcpl):
             tmp_Xcoefs = np.abs(tmp_Xcoefs)
 
         g1v = self.obfn_g1(tmp_coefs)
-        rgr = sl.rfl2norm2(np.sqrt(self.GHGf * np.conj(tmp_Xcoefs)*tmp_Xcoefs), self.cri.Nv, self.cri.axisN)/2.0
+        rgr = rfl2norm2(np.sqrt(self.GHGf * np.conj(tmp_Xcoefs)*tmp_Xcoefs), self.cri.Nv, self.cri.axisN)/2.0
 
         ## normal / internoise, without considering any complex symmetry
             # pure L1, also across channels
             # g1v = self.obfn_g1(self.obfn_g1var())
-            # rgr = sl.rfl2norm2(np.sqrt(self.GHGf * np.conj(self.Xf) * self.Xf),
+            # rgr = rfl2norm2(np.sqrt(self.GHGf * np.conj(self.Xf) * self.Xf),
                                # self.cri.Nv, self.cri.axisN)/2.0
 
         obj = g0v + self.lmbda*g1v + self.mu*rgr
@@ -3066,7 +3065,6 @@ class ConvL2L1Grd(ConvBPDNMaskDcpl):
         """Compute dual residual vector."""
 
         return self.rho * self.cnst_AT(Yprev - Y)
-
 
 
     def rsdl_sn(self, U):
