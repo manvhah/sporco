@@ -2961,7 +2961,7 @@ class ConvL2L1Grd(ConvBPDNMaskDcpl):
 
         if D is not None:
             self.D = np.asarray(D, dtype=self.dtype)
-        self.Df = rfftn(self.D, self.cri.Nv, self.cri.axisN)
+        self.Df = self.fftn(self.D, self.cri.Nv, self.cri.axisN)
         if self.opt['HighMemSolve'] and self.cri.Cd == 1:
             self.c = sl.solvedbd_sm_c(
                 self.Df, np.conj(self.Df),
@@ -2978,7 +2978,7 @@ class ConvL2L1Grd(ConvBPDNMaskDcpl):
 
         self.YU[:] = self.Y - self.U
         self.block_sep0(self.YU)[:] += self.S
-        YUf = rfftn(self.YU, None, self.cri.axisN)
+        YUf = self.fftn(self.YU, None, self.cri.axisN)
         if self.cri.Cd == 1:
             b = np.conj(self.Df) * self.block_sep0(YUf) + self.block_sep1(YUf)
         else:
@@ -2994,7 +2994,7 @@ class ConvL2L1Grd(ConvBPDNMaskDcpl):
                 self.Df, (self.mu / self.rho) * self.GHGf + 1.0, b,
                 self.cri.axisM, self.cri.axisC)
 
-        self.X = irfftn(self.Xf, self.cri.Nv, self.cri.axisN)
+        self.X = self.ifftn(self.Xf, self.cri.Nv, self.cri.axisN)
 
         if self.opt['LinSolveCheck']:
             Dop = lambda x: sl.inner(self.Df, x, axis=self.cri.axisM)
@@ -3067,13 +3067,12 @@ class ConvL2L1Grd(ConvBPDNMaskDcpl):
             tmp_Xcoefs = np.abs(tmp_Xcoefs)
 
         g1v = self.obfn_g1(tmp_coefs)
-        rgr = rfl2norm2(np.sqrt(self.GHGf * np.conj(tmp_Xcoefs)*tmp_Xcoefs), self.cri.Nv, self.cri.axisN)/2.0
+        rgr = self.fl2norm2(np.sqrt(self.GHGf * np.conj(tmp_Xcoefs)*tmp_Xcoefs), self.cri.Nv, self.cri.axisN)/2.0
 
         ## normal / internoise, without considering any complex symmetry
             # pure L1, also across channels
             # g1v = self.obfn_g1(self.obfn_g1var())
-            # rgr = rfl2norm2(np.sqrt(self.GHGf * np.conj(self.Xf) * self.Xf),
-                               # self.cri.Nv, self.cri.axisN)/2.0
+            # rgr = self.fl2norm2(np.sqrt(self.GHGf * np.conj(self.Xf) * self.Xf), self.cri.Nv, self.cri.axisN)/2.0
 
         obj = g0v + self.lmbda*g1v + self.mu*rgr
         return (obj, g0v, g1v, rgr)
@@ -3222,7 +3221,7 @@ class MultiDictConvBPDN(object):
 
         if X is None:
             X = self.getcoef()
-        Xf = rfftn(X, None, self.cbpdn.cri.axisN)
+        Xf = self.fftn(X, None, self.cbpdn.cri.axisN)
         slc = (slice(None),)*self.dimN + \
               (slice(self.chncs[b], self.chncs[b+1]),)
         Sf = np.sum(self.cbpdn.Df[slc] * Xf, axis=self.cbpdn.cri.axisM)
