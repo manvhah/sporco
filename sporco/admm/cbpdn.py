@@ -2893,8 +2893,8 @@ class ConvL2L1Grd(ConvBPDNMaskDcpl):
 
 
 
-    def __init__(self, D, S, lmbda, mu, W=None, opt=None, dimK=None, dimN=2,
-        i_cplx = False):
+    def __init__(self, D, S, lmbda, mu, W=None, opt=None,
+            dimK=None, dimN=2, i_cplx = False):
         """
 
         |
