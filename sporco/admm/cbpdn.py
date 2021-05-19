@@ -2894,7 +2894,8 @@ class ConvL2L1Grd(ConvBPDNMaskDcpl):
 
 
     def __init__(self, D, S, lmbda, mu, W=None, opt=None,
-            dimK=None, dimN=2, i_cplx = False):
+            dimK=None, dimN=2, i_cplx = False,
+            kvec = None):
         """
 
         |
@@ -2932,6 +2933,8 @@ class ConvL2L1Grd(ConvBPDNMaskDcpl):
         i_cplx : bool, If basis functions are complex interlaced Re/Im:
             using L2 across Re/Im in sparsity penalty norm L1 and gradient
             filters
+        kvec : directional vector to multiply before evaluating
+            the gradient e.g. wavenumber vector
         """
 
         if opt is None:
@@ -2940,6 +2943,7 @@ class ConvL2L1Grd(ConvBPDNMaskDcpl):
         self.mu = mu
         self.GHGf = 0
         self.i_cplx = i_cplx
+        self.kvec = kvec
         super(ConvL2L1Grd, self).__init__(D, S, lmbda, W, opt, dimK=dimK,
                                           dimN=dimN)
         self.mu = self.dtype.type(mu)
@@ -3037,46 +3041,63 @@ class ConvL2L1Grd(ConvBPDNMaskDcpl):
         contribution to objective function.
         """
 
+
+        # def combine_complex(x,axis=-1):
+            # # print("splitting",x.shape,"along",axis)
+            # A,B = np.split(x,2,axis=axis)
+            # return A+1j*B
+
+        # # vanilla cost function: L2 over channels and L1 across atoms
+        # tmp_coefs  = self.obfn_g1var()
+        # tmp_Xcoefs = self.Xf
+
+        # # complex_combine channels (only for single channel dict)
+        # # tmp_coefs  = combine_complex(tmp_coefs,axis=3)
+        # # tmp_Xcoefs = combine_complex(tmp_Xcoefs,axis=3)
+        # # print(tmp_coefs.shape, tmp_Xcoefs.shape)
+
+        # if self.i_cplx: 
+            # ## if i_cplx: account for complex split in atoms re/im parts
+
+            # ## complex_combine channels (only for uni-channel dict)
+            # # tmp_coefs  = combine_complex(tmp_coefs,axis=3)
+            # # tmp_Xcoefs = combine_complex(tmp_Xcoefs,axis=3)
+
+            # # complex combine atoms
+            # tmp_coefs  = combine_complex(tmp_coefs)
+            # tmp_Xcoefs = combine_complex(tmp_Xcoefs)
+
+            # tmp_Xcoefs = np.abs(tmp_Xcoefs)
+
+        # g1v = self.obfn_g1(tmp_coefs)
+        # rgr = self.fl2norm2(np.sqrt(self.GHGf * np.conj(tmp_Xcoefs)*tmp_Xcoefs), self.cri.Nv, self.cri.axisN)/2.0
+
+        # ## normal / internoise, without considering any complex symmetry
+            # # pure L1, also across channels
+            # # g1v = self.obfn_g1(self.obfn_g1var())
+            # # rgr = self.fl2norm2(np.sqrt(self.GHGf * np.conj(self.Xf) * self.Xf), self.cri.Nv, self.cri.axisN)/2.0
+
         g0v = self.obfn_g0(self.obfn_g0var())
-
-        def combine_complex(x,axis=-1):
-            # print("splitting",x.shape,"along",axis)
-            A,B = np.split(x,2,axis=axis)
-            return A+1j*B
-
-        # vanilla cost function: L2 over channels and L1 across atoms
-        tmp_coefs  = self.obfn_g1var()
-        tmp_Xcoefs = self.Xf
-
-        # complex_combine channels (only for single channel dict)
-        # tmp_coefs  = combine_complex(tmp_coefs,axis=3)
-        # tmp_Xcoefs = combine_complex(tmp_Xcoefs,axis=3)
-        # print(tmp_coefs.shape, tmp_Xcoefs.shape)
-
-        if self.i_cplx: 
-            ## if i_cplx: account for complex split in atoms re/im parts
-
-            ## complex_combine channels (only for uni-channel dict)
-            # tmp_coefs  = combine_complex(tmp_coefs,axis=3)
-            # tmp_Xcoefs = combine_complex(tmp_Xcoefs,axis=3)
-
-            # complex combine atoms
-            tmp_coefs  = combine_complex(tmp_coefs)
-            tmp_Xcoefs = combine_complex(tmp_Xcoefs)
-
-            tmp_Xcoefs = np.abs(tmp_Xcoefs)
-
-        g1v = self.obfn_g1(tmp_coefs)
-        rgr = self.fl2norm2(np.sqrt(self.GHGf * np.conj(tmp_Xcoefs)*tmp_Xcoefs), self.cri.Nv, self.cri.axisN)/2.0
-
-        ## normal / internoise, without considering any complex symmetry
-            # pure L1, also across channels
-            # g1v = self.obfn_g1(self.obfn_g1var())
-            # rgr = self.fl2norm2(np.sqrt(self.GHGf * np.conj(self.Xf) * self.Xf), self.cri.Nv, self.cri.axisN)/2.0
-
+        g1v = self.obfn_g1(self.obfn_g1var()) #tmp coefs
+        if np.any(self.kvec):
+            amps = (np.conj(self.Xf)*self.Xf)@self.kvec
+        else:
+            amps = np.conj(self.Xf)*self.Xf
+        rgr = self.fl2norm2(np.sqrt(self.GHGf *amps), self.cri.Nv, self.cri.axisN)/2.0
         obj = g0v + self.lmbda*g1v + self.mu*rgr
         return (obj, g0v, g1v, rgr)
 
+    def spatial_grad (self):
+        # rgr = self.fl2norm2(np.sqrt(self.GHGf * np.conj(self.Xf)*self.Xf), self.cri.Nv, self.cri.axisN)/2.0
+        if np.any(self.kvec):
+            amps = (np.conj(self.Xf)*self.Xf)@self.kvec
+        else:
+            amps = np.conj(self.Xf)*self.Xf
+        grad = np.sqrt(self.GHGf * amps)/2.0
+        gradfield = self.ifftn(grad, self.cri.Nv, self.cri.axisN)
+        # sp = sfr_test.problem
+        # grad = np.sqrt(sp.GHGf * np.conj(sp.Xf)*sp.Xf)/2.0
+        return gradfield
 
     def rsdl_s(self, Yprev, Y):
         """Compute dual residual vector."""
