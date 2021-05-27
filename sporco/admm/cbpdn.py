@@ -1613,7 +1613,7 @@ class ConvTwoBlockCnstrnt(admm.ADMMTwoBlockCnstrnt):
         """
 
         self.YU[:] = self.Y - self.U
-        self.block_sep0(self.YU)[:] += self.S
+        self.block_sep0(self.YU)[:] += self.S # why // mha
         YUf = self.fftn(self.YU, None, self.cri.axisN)
         if self.cri.Cd == 1:
             b = np.conj(self.Df) * self.block_sep0(YUf) + self.block_sep1(YUf)
@@ -2781,7 +2781,8 @@ class ConvL2L1Grd(ConvBPDNMaskDcpl):
     ADMM algorithm for a Convolutional Sparse Coding problem with
     an :math:`\ell_2` data fidelity term and both :math:`\ell_1`
     and :math:`\ell_2` of gradient regularisation terms
-    :cite:`wohlberg-2016-convolutional2`. // L2 data fidelity term hacked by mha
+    :cite:`wohlberg-2016-convolutional2`. 
+    // L2 data fidelity term hacked by mha
 
     |
 
@@ -2951,14 +2952,16 @@ class ConvL2L1Grd(ConvBPDNMaskDcpl):
         if hasattr(opt['GradWeight'], 'ndim'):
             self.Wgrd = np.asarray(opt['GradWeight'].reshape((1,)*(dimN+2) +
                                    opt['GradWeight'].shape), dtype=self.dtype)
+        elif opt['GradWeight'] is 'inv_dict':
+            self.Wgrd = 1-np.abs(self.Df)
+            self.Wgrd -= np.min(self.Wgrd)
+            self.Wgrd /= np.max(self.Wgrd)
         else:
             self.Wgrd = np.asarray(opt['GradWeight'], dtype=self.dtype)
 
         self.Gf, GHGf = gradient_filters(self.cri.dimN+3, self.cri.axisN,
                                             self.cri.Nv, dtype=self.dtype)
         self.GHGf = self.Wgrd * GHGf
-
-
 
     def setdict(self, D=None):
         """Set dictionary array."""
@@ -3022,14 +3025,16 @@ class ConvL2L1Grd(ConvBPDNMaskDcpl):
 
         AXU = self.AX + self.U
 
-        ### Mask Decoupling
-        Y0 = (self.rho*(self.block_sep0(AXU) - self.S)) / (self.W**2 + self.rho)
+        ### Mask Decoupling // why -self.S ,mha
+        Y0 = (self.rho*(self.block_sep0(AXU) - self.S)) / \
+                (self.W**2 + self.rho)
 
         ## L1L1
         # Y0 = sp.prox_l1(self.block_sep0(AXU) - self.S, (1.0/self.rho)*self.W)
         
         ## pure L1
-        Y1 = sp.prox_l1(self.block_sep1(AXU), (self.lmbda/self.rho)*self.wl1)
+        Y1 = sp.prox_l1(self.block_sep1(AXU), 
+                (self.lmbda/self.rho)*self.wl1)
 
         self.Y = self.block_cat(Y0, Y1)
 
