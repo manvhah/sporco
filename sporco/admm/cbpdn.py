@@ -2896,7 +2896,7 @@ class ConvL2L1Grd(ConvBPDNMaskDcpl):
 
     def __init__(self, D, S, lmbda, mu, W=None, opt=None,
             dimK=None, dimN=2, i_cplx = False,
-            kvec = None):
+            kvec = None, D_hires = np.array([0])):
         """
 
         |
@@ -2945,6 +2945,7 @@ class ConvL2L1Grd(ConvBPDNMaskDcpl):
         self.GHGf = 0
         self.i_cplx = i_cplx
         self.kvec = kvec
+        self.D_hires = D_hires
         super(ConvL2L1Grd, self).__init__(D, S, lmbda, W, opt, dimK=dimK,
                                           dimN=dimN)
         self.mu = self.dtype.type(mu)
@@ -2952,7 +2953,7 @@ class ConvL2L1Grd(ConvBPDNMaskDcpl):
         if hasattr(opt['GradWeight'], 'ndim'):
             self.Wgrd = np.asarray(opt['GradWeight'].reshape((1,)*(dimN+2) +
                                    opt['GradWeight'].shape), dtype=self.dtype)
-        elif opt['GradWeight'] is 'inv_dict':
+        elif opt['GradWeight'] == 'inv_dict':
             self.Wgrd = 1-np.abs(self.Df)
             self.Wgrd -= np.min(self.Wgrd)
             self.Wgrd /= np.max(self.Wgrd)
@@ -2963,19 +2964,23 @@ class ConvL2L1Grd(ConvBPDNMaskDcpl):
                                             self.cri.Nv, dtype=self.dtype)
         self.GHGf = self.Wgrd * GHGf
 
+
     def setdict(self, D=None):
         """Set dictionary array."""
 
         if D is not None:
             self.D = np.asarray(D, dtype=self.dtype)
-        self.Df = self.fftn(self.D, self.cri.Nv, self.cri.axisN)
+        print(self.D.shape, self.D_hires.shape)
+        if np.any(self.D_hires):
+            self.Df = self.fftn(self.D_hires, self.cri.Nv, self.cri.axisN)
+        else:
+            self.Df = self.fftn(self.D, self.cri.Nv, self.cri.axisN)
         if self.opt['HighMemSolve'] and self.cri.Cd == 1:
             self.c = sl.solvedbd_sm_c(
                 self.Df, np.conj(self.Df),
                 (self.mu / self.rho) * self.GHGf + 1.0, self.cri.axisM)
         else:
             self.c = None
-
 
 
     def xstep(self):
