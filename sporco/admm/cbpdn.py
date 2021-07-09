@@ -2946,6 +2946,7 @@ class ConvL2L1Grd(ConvBPDNMaskDcpl):
         self.i_cplx = i_cplx
         self.kvec = kvec
         self.D_hires = D_hires
+
         super(ConvL2L1Grd, self).__init__(D, S, lmbda, W, opt, dimK=dimK,
                                           dimN=dimN)
         self.mu = self.dtype.type(mu)
@@ -2954,7 +2955,9 @@ class ConvL2L1Grd(ConvBPDNMaskDcpl):
             self.Wgrd = np.asarray(opt['GradWeight'].reshape((1,)*(dimN+2) +
                                    opt['GradWeight'].shape), dtype=self.dtype)
         elif opt['GradWeight'] == 'inv_dict':
-            self.Wgrd = 1-np.abs(self.Df)
+            # 1-dict
+            self.Wgrd = 1-np.abs(self.Df)**2
+            # range 0..1
             self.Wgrd -= np.min(self.Wgrd)
             self.Wgrd /= np.max(self.Wgrd)
         else:
@@ -2963,6 +2966,13 @@ class ConvL2L1Grd(ConvBPDNMaskDcpl):
         self.Gf, GHGf = gradient_filters(self.cri.dimN+3, self.cri.axisN,
                                             self.cri.Nv, dtype=self.dtype)
         self.GHGf = self.Wgrd * GHGf
+
+        if self.opt['HighMemSolve'] and self.cri.Cd == 1:
+            self.c = sl.solvedbd_sm_c(
+                self.Df, np.conj(self.Df),
+                (self.mu / self.rho) * self.GHGf + 1.0, self.cri.axisM)
+        else:
+            self.c = None
 
 
     def setdict(self, D=None):
@@ -2975,12 +2985,6 @@ class ConvL2L1Grd(ConvBPDNMaskDcpl):
             self.Df = self.fftn(self.D_hires, self.cri.Nv, self.cri.axisN)
         else:
             self.Df = self.fftn(self.D, self.cri.Nv, self.cri.axisN)
-        if self.opt['HighMemSolve'] and self.cri.Cd == 1:
-            self.c = sl.solvedbd_sm_c(
-                self.Df, np.conj(self.Df),
-                (self.mu / self.rho) * self.GHGf + 1.0, self.cri.axisM)
-        else:
-            self.c = None
 
 
     def xstep(self):
@@ -3030,16 +3034,12 @@ class ConvL2L1Grd(ConvBPDNMaskDcpl):
 
         AXU = self.AX + self.U
 
-        ### Mask Decoupling // why -self.S ,mha
+        ### Mask Decoupling
         Y0 = (self.rho*(self.block_sep0(AXU) - self.S)) / \
                 (self.W**2 + self.rho)
-
-        ## L1L1
-        # Y0 = sp.prox_l1(self.block_sep0(AXU) - self.S, (1.0/self.rho)*self.W)
         
         ## pure L1
-        Y1 = sp.prox_l1(self.block_sep1(AXU), 
-                (self.lmbda/self.rho)*self.wl1)
+        Y1 = sp.prox_l1(self.block_sep1(AXU), (self.lmbda/self.rho)*self.wl1)
 
         self.Y = self.block_cat(Y0, Y1)
 
